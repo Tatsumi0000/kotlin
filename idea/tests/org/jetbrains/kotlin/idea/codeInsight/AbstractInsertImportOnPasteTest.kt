@@ -7,6 +7,7 @@ package org.jetbrains.kotlin.idea.codeInsight
 
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.openapi.util.io.FileUtil
+import com.intellij.util.ui.UIUtil
 import org.jetbrains.kotlin.idea.AbstractCopyPasteTest
 import org.jetbrains.kotlin.idea.test.dumpTextWithErrors
 import org.jetbrains.kotlin.idea.util.application.runWriteAction
@@ -48,6 +49,7 @@ abstract class AbstractInsertImportOnPasteTest : AbstractCopyPasteTest() {
 
         configureTargetFile(testFileName.replace(".kt", ".to.kt"))
         performNotWriteEditorAction(IdeActions.ACTION_PASTE)
+        UIUtil.dispatchAllInvocationEvents()
 
         val namesToImportDump = KotlinCopyPasteReferenceProcessor.declarationsToImportSuggested.joinToString("\n")
         KotlinTestUtils.assertEqualsToFile(testDataFile(testFileName.replace(".kt", ".expected.names")), namesToImportDump)

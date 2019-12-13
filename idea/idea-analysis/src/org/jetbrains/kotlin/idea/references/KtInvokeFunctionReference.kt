@@ -47,7 +47,7 @@ class KtInvokeFunctionReference(expression: KtCallExpression) : KtSimpleReferenc
         return when {
             resolvedCall is VariableAsFunctionResolvedCall ->
                 setOf<DeclarationDescriptor>((resolvedCall as VariableAsFunctionResolvedCall).functionCall.candidateDescriptor)
-            call != null && resolvedCall != null && call.callType == Call.CallType.INVOKE ->
+            call != null && resolvedCall != null && (call.callType == Call.CallType.DEFAULT || call.callType == Call.CallType.INVOKE) ->
                 setOf<DeclarationDescriptor>(resolvedCall.candidateDescriptor)
             else ->
                 emptyList()
