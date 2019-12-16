@@ -1191,10 +1191,10 @@ class NewMultiplatformIT : BaseGradleIT() {
     }
 
     // Check that we still can build binaries from sources if the corresponding property is specified.
-    // TODO: Drop in 1.3.70.
+    // TODO: Drop in 1.4
     @Test
     fun testLinkNativeBinaryFromSources() = with(
-        transformProjectWithPluginsDsl("groovy-dsl", gradleVersion, "new-mpp-native-binaries")
+        transformProjectWithPluginsDsl("new-mpp-native-binaries", gradleVersion)
     ) {
         val linkTask = ":linkDebugExecutable${nativeHostTargetName.capitalize()}"
 
