@@ -112,10 +112,26 @@ private fun extraLambdaInfo(
 
 private fun extractLambdaInfoFromFunctionalType(expectedType: UnwrappedType?, argument: LambdaKotlinCallArgument): ResolvedLambdaAtom? {
     if (expectedType == null || !expectedType.isBuiltinFunctionalType) return null
-    val parameters = extractLambdaParameters(expectedType, argument)
-
+    val parametersTypes = argument.parametersTypes
+    val expectedParameters = expectedType.getValueParameterTypesFromFunctionType()
+    val expectedReceiver = expectedType.getReceiverTypeFromFunctionType()?.unwrap()
     val argumentAsFunctionExpression = argument.safeAs<FunctionExpression>()
-    val receiverType = argumentAsFunctionExpression?.receiverType ?: expectedType.getReceiverTypeFromFunctionType()?.unwrap()
+    val takeExpected = parametersTypes == null ||
+            when (parametersTypes.size - expectedParameters.size) {
+                1 -> expectedReceiver != null && parametersTypes.first() == expectedReceiver
+                -1 -> argumentAsFunctionExpression?.receiverType == expectedParameters.first().type.unwrap()
+                else -> false
+            }
+    val parameters = if (takeExpected) {
+        expectedParameters.map { it.type.unwrap() }
+    } else {
+        parametersTypes!!.mapIndexed { index, type ->
+            type ?: expectedParameters.getOrNull(index)?.type?.unwrap() ?: expectedType.builtIns.nullableAnyType
+        }
+    }
+    val receiverType =
+        if (takeExpected) argumentAsFunctionExpression?.receiverType ?:expectedReceiver else argumentAsFunctionExpression?.receiverType
+
     val returnType = argumentAsFunctionExpression?.returnType ?: expectedType.getReturnTypeFromFunctionType().unwrap()
 
     return ResolvedLambdaAtom(
@@ -127,18 +143,6 @@ private fun extractLambdaInfoFromFunctionalType(expectedType: UnwrappedType?, ar
         typeVariableForLambdaReturnType = null,
         expectedType = expectedType
     )
-}
-
-private fun extractLambdaParameters(expectedType: UnwrappedType, argument: LambdaKotlinCallArgument): List<UnwrappedType> {
-    val parametersTypes = argument.parametersTypes
-    val expectedParameters = expectedType.getValueParameterTypesFromFunctionType()
-    if (parametersTypes == null || parametersTypes.size != expectedParameters.size) {
-        return expectedParameters.map { it.type.unwrap() }
-    }
-
-    return parametersTypes.mapIndexed { index, type ->
-        type ?: expectedParameters.getOrNull(index)?.type?.unwrap() ?: expectedType.builtIns.nullableAnyType
-    }
 }
 
 fun LambdaWithTypeVariableAsExpectedTypeAtom.transformToResolvedLambda(csBuilder: ConstraintSystemBuilder): ResolvedLambdaAtom {
