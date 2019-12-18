@@ -207,7 +207,6 @@ abstract class KotlinManglerImpl : KotlinMangler {
         val signatureSuffix =
             when {
                 this.typeParameters.isNotEmpty() -> "Generic"
-                returnType.isInlined -> "ValueType"
                 !returnType.isUnitOrNullableUnit() -> typeToHashString(returnType, typeParameterNamer)
                 else -> ""
             }
