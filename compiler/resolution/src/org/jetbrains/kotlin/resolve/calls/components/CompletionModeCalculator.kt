@@ -15,129 +15,119 @@ import org.jetbrains.kotlin.types.UnwrappedType
 import org.jetbrains.kotlin.types.model.*
 import java.util.*
 
-class CompletionModeCalculator(
-    private val candidate: KotlinResolutionCandidate,
-    private val expectedType: UnwrappedType?,
-    private val returnType: UnwrappedType?
-) {
-    private val csCompleterContext: KotlinConstraintSystemCompleter.Context =
-        candidate.getSystem().asConstraintSystemCompleterContext()
+typealias CsCompleterContext = KotlinConstraintSystemCompleter.Context
 
-    private enum class FixationRequirement {
-        LOWER, UPPER, EQUALITY
+class CompletionModeCalculator {
+    companion object {
+        fun computeCompletionMode(
+            candidate: KotlinResolutionCandidate,
+            expectedType: UnwrappedType?,
+            returnType: UnwrappedType?
+        ): ConstraintSystemCompletionMode = with(candidate) {
+            val csCompleterContext = getSystem().asConstraintSystemCompleterContext()
+
+            // Presence of expected type means that we are trying to complete outermost call => completion mode should be full
+            if (expectedType != null) return ConstraintSystemCompletionMode.FULL
+
+            // This is questionable as null return type can be only for error call
+            if (returnType == null) return ConstraintSystemCompletionMode.PARTIAL
+
+            // Full if return type for call has no type variables
+            if (csBuilder.isProperType(returnType)) return ConstraintSystemCompletionMode.FULL
+
+            // For nested call with variables in return type check possibility of full completion
+            return CalculatorForNestedCall(returnType, csCompleterContext).computeCompletionMode()
+        }
     }
 
-    private val fixationRequirementsForVariables: MutableMap<VariableWithConstraints, FixationRequirement> = mutableMapOf()
-    private val variablesWithQueuedConstraints: MutableSet<TypeVariableMarker> = mutableSetOf()
-    private val typesToProcess: Queue<KotlinTypeMarker> = ArrayDeque()
+    private class CalculatorForNestedCall(
+        private val returnType: UnwrappedType?,
+        private val csCompleterContext: CsCompleterContext
+    ) {
+        private enum class FixationDirection {
+            TO_SUBTYPE, TO_SUPERTYPE, EQUALITY
+        }
 
-    fun computeCompletionMode(): ConstraintSystemCompletionMode = with(candidate) {
-        // Presence of expected type means that we are trying to complete outermost call => completion mode should be full
-        if (expectedType != null) return ConstraintSystemCompletionMode.FULL
+        private val fixationDirectionsForVariables = mutableMapOf<VariableWithConstraints, FixationDirection>()
+        private val variablesWithQueuedConstraints = mutableSetOf<TypeVariableMarker>()
+        private val typesToProcess: Queue<KotlinTypeMarker> = ArrayDeque()
 
-        // This is questionable as null return type can be only for error call
-        if (returnType == null) return ConstraintSystemCompletionMode.PARTIAL
+        fun computeCompletionMode(): ConstraintSystemCompletionMode = with(csCompleterContext) {
+            // Add fixation directions for variables based on effective variance in type
+            typesToProcess.add(returnType)
+            computeDirections()
 
-        // Return type for call has no type variables
-        if (csBuilder.isProperType(returnType)) return ConstraintSystemCompletionMode.FULL
+            // If all variables have required proper constraint, run full completion
+            if (directionRequirementsForVariablesHold())
+                return ConstraintSystemCompletionMode.FULL
 
-        // Add fixation directions for variables based on effective variance in type
-        typesToProcess.add(returnType)
-        val requirementStatus = makeRequirements()
-        if (requirementStatus == RequirementStatus.CONTRADICTION)
             return ConstraintSystemCompletionMode.PARTIAL
+        }
 
-        // If there is no contradiction and all variables have required proper constraint, run full completion
-        if (requirementsForVariablesSatisfied())
-            return ConstraintSystemCompletionMode.FULL
+        private fun CsCompleterContext.computeDirections() {
+            while (typesToProcess.isNotEmpty()) {
+                val type = typesToProcess.poll() ?: break
 
-        return ConstraintSystemCompletionMode.PARTIAL
-    }
-
-    private enum class RequirementStatus { OK, CONTRADICTION }
-
-    private fun makeRequirements(): RequirementStatus = with(csCompleterContext) {
-        while (typesToProcess.isNotEmpty()) {
-            val type = typesToProcess.poll() ?: break
-
-            fixationRequirementForTopLevel(type)?.let {
-                if (processRequirementAndCheckContradiction(it))
-                    return RequirementStatus.CONTRADICTION
-            }
-
-            // find all variables in type and make requirements for them
-            val hasContradiction = type.contains { fromReturnType ->
-                for (requirementForVariable in fixationRequirementsForArguments(fromReturnType)) {
-                    if (processRequirementAndCheckContradiction(requirementForVariable))
-                        return@contains true
+                fixationRequirementForTopLevel(type)?.let { directionForVariable ->
+                    updateDirection(directionForVariable)
+                    enqueueTypesFromConstraints(directionForVariable.variable)
                 }
-                false
-            }
 
-            if (hasContradiction)
-                return RequirementStatus.CONTRADICTION
+                // find all variables in type and make requirements for them
+                type.contains { fromReturnType ->
+                    for (directionForVariable in directionsForVariablesInTypeArguments(fromReturnType)) {
+                        updateDirection(directionForVariable)
+                        enqueueTypesFromConstraints(directionForVariable.variable)
+                    }
+                    false
+                }
+            }
         }
 
-        return RequirementStatus.OK
-    }
+        private fun enqueueTypesFromConstraints(variableWithConstraints: VariableWithConstraints) {
+            val variable = variableWithConstraints.typeVariable
+            if (variable !in variablesWithQueuedConstraints) {
+                for (constraint in variableWithConstraints.constraints) {
+                    typesToProcess.add(constraint.type)
+                }
 
-    // true for contradiction to stop contains
-    private fun processRequirementAndCheckContradiction(requirement: FixationRequirementForVariable): Boolean {
-        val (variableWithConstraints, fixationRequirement) = requirement
-        val variable = variableWithConstraints.typeVariable
+                variablesWithQueuedConstraints.add(variable)
+            }
+        }
 
-        if (!updateDirection(variableWithConstraints, fixationRequirement))
+        private fun CsCompleterContext.directionRequirementsForVariablesHold(): Boolean {
+            for ((variable, fixationDirection) in fixationDirectionsForVariables) {
+                if (!hasProperConstraint(variable, fixationDirection))
+                    return false
+            }
             return true
+        }
 
-        if (variable !in variablesWithQueuedConstraints) {
-            for (constraint in variableWithConstraints.constraints) {
-                typesToProcess.add(constraint.type)
+        private fun updateDirection(directionForVariable: FixationDirectionForVariable) {
+            val (variable, newDirection) = directionForVariable
+            fixationDirectionsForVariables[variable]?.let { oldDirection ->
+                // To sub and to super are merged into equality, old equality stays
+                if (oldDirection != FixationDirection.EQUALITY && oldDirection != newDirection)
+                    fixationDirectionsForVariables[variable] = FixationDirection.EQUALITY
             }
-
-            variablesWithQueuedConstraints.add(variable)
+            fixationDirectionsForVariables[variable] = newDirection
         }
-        return false
-    }
 
-    private fun requirementsForVariablesSatisfied(): Boolean {
-        for ((variable, fixationRequirement) in fixationRequirementsForVariables) {
-            if (!hasProperConstraint(variable, fixationRequirement))
-                return false
-        }
-        return true
-    }
+        private data class FixationDirectionForVariable(val variable: VariableWithConstraints, val direction: FixationDirection)
 
-    private fun updateDirection(variable: VariableWithConstraints, requirement: FixationRequirement): Boolean {
-        fixationRequirementsForVariables[variable]?.let {
-            return it == requirement
-        }
-        fixationRequirementsForVariables[variable] = requirement
-        return true
-    }
-
-    // need something more suitable to avoid map.get()!!
-    private val varianceToDirection = mapOf(
-        TypeVariance.IN to FixationRequirement.UPPER,
-        TypeVariance.OUT to FixationRequirement.LOWER,
-        TypeVariance.INV to FixationRequirement.EQUALITY
-    )
-
-    private data class FixationRequirementForVariable(val variable: VariableWithConstraints, val requirement: FixationRequirement)
-
-    private fun fixationRequirementForTopLevel(type: KotlinTypeMarker): FixationRequirementForVariable? =
-        with(csCompleterContext) {
+        private fun CsCompleterContext.fixationRequirementForTopLevel(type: KotlinTypeMarker): FixationDirectionForVariable? {
             return notFixedTypeVariables[type.typeConstructor()]?.let {
-                FixationRequirementForVariable(it, FixationRequirement.LOWER)
+                FixationDirectionForVariable(it, FixationDirection.TO_SUBTYPE)
             }
         }
 
-    private fun fixationRequirementsForArguments(type: KotlinTypeMarker): List<FixationRequirementForVariable> =
-        with(csCompleterContext) {
-            val requirementsFromType = mutableListOf<FixationRequirementForVariable>()
+        private fun CsCompleterContext.directionsForVariablesInTypeArguments(type: KotlinTypeMarker): List<FixationDirectionForVariable> {
             assert(type.argumentsCount() == type.typeConstructor().parametersCount()) {
-                "Argument and parameter count don't match for type $type. " +
+                "Arguments and parameters count don't match for type $type. " +
                         "Arguments: ${type.argumentsCount()}, parameters: ${type.typeConstructor().parametersCount()}"
             }
+
+            val directionsForVariables = mutableListOf<FixationDirectionForVariable>()
 
             for (position in 0 until type.argumentsCount()) {
                 val argument = type.getArgument(position)
@@ -150,28 +140,37 @@ class CompletionModeCalculator(
                 val effectiveVariance = AbstractTypeChecker.effectiveVariance(parameter.getVariance(), argument.getVariance())
                     ?: TypeVariance.OUT // Discuss
 
-                val requirement = FixationRequirementForVariable(variableWithConstraints, varianceToDirection[effectiveVariance]!!)
-                requirementsFromType.add(requirement)
+                val direction = when (effectiveVariance) {
+                    TypeVariance.IN -> FixationDirection.TO_SUPERTYPE
+                    TypeVariance.OUT -> FixationDirection.TO_SUBTYPE
+                    TypeVariance.INV -> FixationDirection.EQUALITY
+                }
+
+                val requirement = FixationDirectionForVariable(variableWithConstraints, direction)
+                directionsForVariables.add(requirement)
             }
 
-            return requirementsFromType
+            return directionsForVariables
         }
 
-    private fun hasProperConstraint(variableWithConstraints: VariableWithConstraints, requirement: FixationRequirement): Boolean =
-        with(csCompleterContext) {
+        private fun CsCompleterContext.hasProperConstraint(
+            variableWithConstraints: VariableWithConstraints,
+            direction: FixationDirection
+        ): Boolean {
             val constraints = variableWithConstraints.constraints
 
             // todo check correctness for @Exact
-            constraints.isNotEmpty() && constraints.any { constraint ->
-                constraint.hasRequiredKind(requirement)
+            return constraints.isNotEmpty() && constraints.any { constraint ->
+                constraint.hasRequiredKind(direction)
                         && !constraint.type.typeConstructor().isIntegerLiteralTypeConstructor()
                         && isProperType(constraint.type)
             }
         }
 
-    private fun Constraint.hasRequiredKind(requirement: FixationRequirement) = when (requirement) {
-        FixationRequirement.LOWER -> kind.isLower() || kind.isEqual()
-        FixationRequirement.UPPER -> kind.isUpper() || kind.isEqual()
-        FixationRequirement.EQUALITY -> kind.isEqual()
+        private fun Constraint.hasRequiredKind(direction: FixationDirection) = when (direction) {
+            FixationDirection.TO_SUBTYPE -> kind.isLower() || kind.isEqual()
+            FixationDirection.TO_SUPERTYPE -> kind.isUpper() || kind.isEqual()
+            FixationDirection.EQUALITY -> kind.isEqual()
+        }
     }
 }
