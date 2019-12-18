@@ -14,8 +14,10 @@ import org.jetbrains.kotlin.fir.java.scopes.JavaClassUseSiteMemberScope
 import org.jetbrains.kotlin.fir.java.scopes.JavaOverrideChecker
 import org.jetbrains.kotlin.fir.resolve.*
 import org.jetbrains.kotlin.fir.resolve.substitution.ConeSubstitutor
+import org.jetbrains.kotlin.fir.scopes.ConeSubstitutionScopeKey
 import org.jetbrains.kotlin.fir.scopes.FirScope
 import org.jetbrains.kotlin.fir.scopes.FirScopeProvider
+import org.jetbrains.kotlin.fir.scopes.impl.FirClassSubstitutionScope
 import org.jetbrains.kotlin.fir.scopes.impl.FirSuperTypeScope
 import org.jetbrains.kotlin.fir.scopes.impl.declaredMemberScope
 import org.jetbrains.kotlin.fir.scopes.impl.declaredMemberScopeWithLazyNestedScope
@@ -38,7 +40,11 @@ class JavaScopeProvider(
         useSiteSession: FirSession,
         scopeSession: ScopeSession
     ): FirScope {
-        return buildJavaEnhancementScope(useSiteSession, klass.symbol as FirRegularClassSymbol, scopeSession, mutableSetOf())
+        val baseScope = buildJavaEnhancementScope(useSiteSession, klass.symbol as FirRegularClassSymbol, scopeSession, mutableSetOf())
+        if (substitutor == ConeSubstitutor.Empty) return baseScope
+        return scopeSession.getOrBuild(klass, ConeSubstitutionScopeKey(substitutor)) {
+            FirClassSubstitutionScope(useSiteSession, baseScope, scopeSession, substitutor)
+        }
     }
 
     private fun buildJavaEnhancementScope(

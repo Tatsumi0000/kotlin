@@ -244,12 +244,10 @@ class QualifiedReceiverTowerLevel(
                 val fir = symbol.fir
                 if (fir is FirClass<*>) {
                     fir.scope(ConeSubstitutor.Empty, session, bodyResolveComponents.scopeSession)
-                } else if (fir is FirTypeAlias) {
+                } else {
                     TODO("error not ssss")
 
                 }
-                session.firSymbolProvider.getClassUseSiteMemberScope(classId, session, bodyResolveComponents.scopeSession)
-                    ?: return ProcessorAction.NEXT
             }
         }
 
