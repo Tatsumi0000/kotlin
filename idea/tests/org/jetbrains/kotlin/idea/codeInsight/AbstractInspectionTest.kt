@@ -37,7 +37,6 @@ abstract class AbstractInspectionTest : KotlinLightCodeInsightFixtureTestCase() 
             super.setUp()
             EntryPointsManagerBase.getInstance(project).ADDITIONAL_ANNOTATIONS.add(ENTRY_POINT_ANNOTATION)
             runWriteAction { FileTypeManager.getInstance().associateExtension(GroovyFileType.GROOVY_FILE_TYPE, "gradle") }
-            ApplicationManager.getApplication().isScriptChangesNotifierDisabled = true
         } catch (e: Throwable) {
             TestLoggerFactory.onTestFinished(false)
             throw e
@@ -45,7 +44,6 @@ abstract class AbstractInspectionTest : KotlinLightCodeInsightFixtureTestCase() 
     }
 
     override fun tearDown() {
-        ApplicationManager.getApplication().isScriptChangesNotifierDisabled = false
         EntryPointsManagerBase.getInstance(project).ADDITIONAL_ANNOTATIONS.remove(ENTRY_POINT_ANNOTATION)
         super.tearDown()
     }

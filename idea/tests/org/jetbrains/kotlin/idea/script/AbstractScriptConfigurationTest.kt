@@ -147,7 +147,6 @@ abstract class AbstractScriptConfigurationTest : KotlinCompletionTestCase() {
 
     override fun setUp() {
         super.setUp()
-        ApplicationManager.getApplication().isScriptChangesNotifierDisabled = true
 
         settings = KotlinScriptingSettings.getInstance(project).state
 
@@ -163,8 +162,6 @@ abstract class AbstractScriptConfigurationTest : KotlinCompletionTestCase() {
     }
 
     override fun tearDown() {
-        ApplicationManager.getApplication().isScriptChangesNotifierDisabled = false
-
         System.setProperty("kotlin.script.classpath", oldScripClasspath ?: "")
 
         settings?.let {
