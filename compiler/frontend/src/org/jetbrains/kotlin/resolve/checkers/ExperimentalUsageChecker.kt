@@ -37,6 +37,7 @@ import org.jetbrains.kotlin.resolve.calls.model.ResolvedCall
 import org.jetbrains.kotlin.resolve.constants.ArrayValue
 import org.jetbrains.kotlin.resolve.constants.EnumValue
 import org.jetbrains.kotlin.resolve.constants.KClassValue
+import org.jetbrains.kotlin.resolve.constants.StringValue
 import org.jetbrains.kotlin.resolve.deprecation.CoroutineCompatibilitySupport
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationLevelValue
 import org.jetbrains.kotlin.resolve.deprecation.DeprecationResolver
@@ -51,7 +52,7 @@ import org.jetbrains.kotlin.utils.addIfNotNull
 class ExperimentalUsageChecker(project: Project) : CallChecker {
     private val moduleAnnotationsResolver = ModuleAnnotationsResolver.getInstance(project)
 
-    data class Experimentality(val annotationFqName: FqName, val severity: Severity) {
+    data class Experimentality(val annotationFqName: FqName, val severity: Severity, val message: String?) {
         enum class Severity { WARNING, ERROR }
 
         companion object {
@@ -84,6 +85,7 @@ class ExperimentalUsageChecker(project: Project) : CallChecker {
         internal val WAS_EXPERIMENTAL_ANNOTATION_CLASS = Name.identifier("markerClass")
 
         private val LEVEL = Name.identifier("level")
+        private val MESSAGE = Name.identifier("message")
         private val WARNING_LEVEL = Name.identifier("WARNING")
         private val ERROR_LEVEL = Name.identifier("ERROR")
 
@@ -153,13 +155,16 @@ class ExperimentalUsageChecker(project: Project) : CallChecker {
                     ?: annotations.findAnnotation(OLD_EXPERIMENTAL_FQ_NAME)
                     ?: return null
 
-            val severity = when ((experimental.allValueArguments[LEVEL] as? EnumValue)?.enumEntryName) {
+            val arguments = experimental.allValueArguments
+            val severity = when ((arguments[LEVEL] as? EnumValue)?.enumEntryName) {
                 WARNING_LEVEL -> Experimentality.Severity.WARNING
                 ERROR_LEVEL -> Experimentality.Severity.ERROR
                 else -> Experimentality.DEFAULT_SEVERITY
             }
 
-            return Experimentality(fqNameSafe, severity)
+            val message = (arguments[MESSAGE] as? StringValue)?.value
+
+            return Experimentality(fqNameSafe, severity, message)
         }
 
         private fun PsiElement.isExperimentalityAccepted(annotationFqName: FqName, context: CheckerContext): Boolean =

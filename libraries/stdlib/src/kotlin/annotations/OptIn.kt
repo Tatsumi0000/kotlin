@@ -24,7 +24,10 @@ import kotlin.reflect.KClass
 @Retention(BINARY)
 @SinceKotlin("1.3")
 @RequireKotlin("1.3.70", versionKind = RequireKotlinVersionKind.COMPILER_VERSION)
-public annotation class RequiresOptIn(val level: Level = Level.ERROR) {
+public annotation class RequiresOptIn(
+    val level: Level = Level.ERROR,
+    val message: String = ""
+) {
     /**
      * Severity of the diagnostic that should be reported on usages which did not explicitly opted into
      * the API either by using [OptIn] or by being annotated with the corresponding marker annotation.
