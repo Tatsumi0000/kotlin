@@ -16,7 +16,7 @@ import org.jetbrains.kotlin.types.model.KotlinTypeMarker
 abstract class AbstractConeCallConflictResolver(
     private val specificityComparator: TypeSpecificityComparator,
     protected val inferenceComponents: InferenceComponents
-) : ConeCallConflictResolver {
+) : ConeCallConflictResolver() {
     protected fun Collection<Candidate>.setIfOneOrEmpty(): Set<Candidate>? = when (size) {
         0 -> emptySet()
         1 -> setOf(single())
