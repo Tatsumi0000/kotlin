@@ -1,12 +1,12 @@
 // !API_VERSION: 1.2
-// !USE_EXPERIMENTAL: kotlin.Experimental
+// !USE_EXPERIMENTAL: kotlin.RequiresOptIn
 // !DIAGNOSTICS: -INVISIBLE_MEMBER -INVISIBLE_REFERENCE -NEWER_VERSION_IN_SINCE_KOTLIN -UNUSED_PARAMETER
 
 @SinceKotlin("1.3")
 fun newPublishedFun() {}
 
 
-@Experimental
+@RequiresOptIn
 annotation class Marker
 
 @SinceKotlin("1.3")
@@ -36,7 +36,7 @@ fun use1(
     NewClassExperimentalInThePast()
 }
 
-@UseExperimental(Marker::class)
+@OptIn(Marker::class)
 fun use2(
     c2: NewClassExperimentalInThePast,
     t2: TypeAliasToNewClass

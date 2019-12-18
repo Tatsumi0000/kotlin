@@ -17,7 +17,7 @@ fun use2() {
     f()
 }
 
-@<!EXPERIMENTAL_IS_NOT_ENABLED!>UseExperimental<!>(Marker::class)
+@<!EXPERIMENTAL_IS_NOT_ENABLED!>OptIn<!>(Marker::class)
 fun use3() {
     f()
 }

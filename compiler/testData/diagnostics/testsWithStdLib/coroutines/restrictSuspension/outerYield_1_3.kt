@@ -1,5 +1,5 @@
 // !LANGUAGE: +ReleaseCoroutines +ExperimentalBuilderInference
-// !USE_EXPERIMENTAL: kotlin.Experimental
+// !USE_EXPERIMENTAL: kotlin.RequiresOptIn
 // SKIP_TXT
 
 @file:UseExperimental(ExperimentalTypeInference::class)

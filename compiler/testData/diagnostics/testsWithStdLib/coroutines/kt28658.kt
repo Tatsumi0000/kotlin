@@ -1,5 +1,5 @@
 // !LANGUAGE: +NewInference
-// !USE_EXPERIMENTAL: kotlin.Experimental
+// !USE_EXPERIMENTAL: kotlin.RequiresOptIn
 // !DIAGNOSTICS: -UNUSED_EXPRESSION -UNUSED_PARAMETER -UNUSED_VARIABLE
 
 import kotlin.experimental.ExperimentalTypeInference

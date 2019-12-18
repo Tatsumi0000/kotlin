@@ -353,7 +353,7 @@ open class KotlinNativeCompile : AbstractKotlinNativeCompile<KotlinCommonOptions
             add("-XXLanguage:+$featureName")
         }
         experimentalAnnotationsInUse.forEach { annotationName ->
-            add("-Xuse-experimental=$annotationName")
+            add("-Xopt-in=$annotationName")
         }
     }
 
@@ -544,7 +544,7 @@ open class KotlinNativeLink : AbstractKotlinNativeCompile<KotlinCommonToolOption
                     add("-XXLanguage:+$featureName")
                 }
                 it.experimentalAnnotationsInUse.forEach { annotationName ->
-                    add("-Xuse-experimental=$annotationName")
+                    add("-Xopt-in=$annotationName")
                 }
             }
         }

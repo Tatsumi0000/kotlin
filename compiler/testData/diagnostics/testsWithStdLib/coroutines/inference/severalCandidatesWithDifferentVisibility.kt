@@ -1,4 +1,4 @@
-// !USE_EXPERIMENTAL: kotlin.Experimental
+// !USE_EXPERIMENTAL: kotlin.RequiresOptIn
 // !DIAGNOSTICS: -UNUSED_PARAMETER -UNUSED_VARIABLE
 
 // FILE: a.kt
