@@ -20,6 +20,8 @@ import org.jetbrains.kotlin.fir.builder.RawFirBuilder
 import org.jetbrains.kotlin.fir.declarations.FirFile
 import org.jetbrains.kotlin.fir.dump.MultiModuleHtmlFirDump
 import org.jetbrains.kotlin.fir.lightTree.LightTree2Fir
+import org.jetbrains.kotlin.fir.resolve.firProvider
+import org.jetbrains.kotlin.fir.resolve.impl.FirProviderImpl
 import org.jetbrains.kotlin.fir.resolve.transformers.FirTotalResolveTransformer
 import org.jetbrains.kotlin.fir.scopes.ProcessorAction
 import org.jetbrains.kotlin.test.ConfigurationKind
@@ -62,7 +64,8 @@ class FirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
             val lightTree2Fir = LightTree2Fir(session, stubMode = false)
             bench.buildFiles(lightTree2Fir, moduleData.sources.filter { it.extension == "kt" })
         } else {
-            val builder = RawFirBuilder(session, stubMode = false)
+            val firProvider = session.firProvider as FirProviderImpl
+            val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider, stubMode = false)
             bench.buildFiles(builder, ktFiles)
         }
 

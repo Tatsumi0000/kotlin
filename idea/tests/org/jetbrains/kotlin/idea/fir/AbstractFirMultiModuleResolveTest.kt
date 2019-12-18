@@ -86,7 +86,8 @@ abstract class AbstractFirMultiModuleResolveTest : AbstractMultiModuleTest() {
             val session = createSession(module, provider)
             sessions += session
 
-            val builder = RawFirBuilder(session, stubMode = false)
+            val firProvider = (session.firProvider as FirProviderImpl)
+            val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider, stubMode = false)
             val psiManager = PsiManager.getInstance(project)
 
             val ideaModuleInfo = session.moduleInfo.cast<IdeaModuleInfo>()
@@ -106,7 +107,7 @@ abstract class AbstractFirMultiModuleResolveTest : AbstractMultiModuleTest() {
             files.forEach {
                 val file = psiManager.findFile(it) as? KtFile ?: return@forEach
                 val firFile = builder.buildFirFile(file)
-                (session.firProvider as FirProviderImpl).recordFile(firFile)
+                firProvider.recordFile(firFile)
                 firFiles += firFile
             }
             firFilesPerSession[session] = firFiles

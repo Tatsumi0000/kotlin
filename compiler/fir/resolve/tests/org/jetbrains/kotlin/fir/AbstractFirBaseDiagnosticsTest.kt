@@ -107,10 +107,11 @@ abstract class AbstractFirBaseDiagnosticsTest : BaseDiagnosticsTest() {
                 firFile
             }
         } else {
-            val firBuilder = RawFirBuilder(session, false)
+            val firProvider = (session.firProvider as FirProviderImpl)
+            val firBuilder = RawFirBuilder(session, firProvider.kotlinScopeProvider, false)
             ktFiles.mapTo(firFiles) {
                 val firFile = firBuilder.buildFirFile(it)
-                (session.firProvider as FirProviderImpl).recordFile(firFile)
+                firProvider.recordFile(firFile)
                 firFile
             }
         }

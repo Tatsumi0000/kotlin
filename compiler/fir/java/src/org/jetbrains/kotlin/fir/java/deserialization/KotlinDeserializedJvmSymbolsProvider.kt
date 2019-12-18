@@ -29,6 +29,7 @@ import org.jetbrains.kotlin.fir.references.impl.FirErrorNamedReferenceImpl
 import org.jetbrains.kotlin.fir.references.impl.FirResolvedNamedReferenceImpl
 import org.jetbrains.kotlin.fir.resolve.*
 import org.jetbrains.kotlin.fir.scopes.FirScope
+import org.jetbrains.kotlin.fir.scopes.KotlinScopeProvider
 import org.jetbrains.kotlin.fir.scopes.impl.nestedClassifierScope
 import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.FirResolvedTypeRef
@@ -60,7 +61,8 @@ class KotlinDeserializedJvmSymbolsProvider(
     private val packagePartProvider: PackagePartProvider,
     private val javaSymbolProvider: JavaSymbolProvider,
     private val kotlinClassFinder: KotlinClassFinder,
-    private val javaClassFinder: JavaClassFinder
+    private val javaClassFinder: JavaClassFinder,
+    private val kotlinScopeProvider: KotlinScopeProvider
 ) : AbstractFirSymbolProvider<FirClassLikeSymbol<*>>() {
     private val classesCache = HashMap<ClassId, FirRegularClassSymbol>()
     private val typeAliasCache = HashMap<ClassId, FirTypeAliasSymbol?>()
@@ -345,6 +347,7 @@ class KotlinDeserializedJvmSymbolsProvider(
             deserializeClassToSymbol(
                 classId, classProto, symbol, nameResolver, session,
                 JvmBinaryAnnotationDeserializer(session),
+                kotlinScopeProvider,
                 parentContext, this::findAndDeserializeClass
             )
             symbol.fir.declarations.filterIsInstance<FirEnumEntryImpl>().forEach {

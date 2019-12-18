@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.fir.references.impl.*
 import org.jetbrains.kotlin.fir.symbols.CallableId
 import org.jetbrains.kotlin.fir.symbols.impl.*
 import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.scopes.FirScopeProvider
 import org.jetbrains.kotlin.fir.types.impl.*
 import org.jetbrains.kotlin.lexer.KtTokens.*
 import org.jetbrains.kotlin.name.ClassId
@@ -36,7 +37,7 @@ import org.jetbrains.kotlin.types.Variance
 import org.jetbrains.kotlin.types.expressions.OperatorConventions
 import org.jetbrains.kotlin.util.OperatorNameConventions
 
-class RawFirBuilder(session: FirSession, val stubMode: Boolean) : BaseFirBuilder<PsiElement>(session) {
+class RawFirBuilder(session: FirSession, val scopeProvider: FirScopeProvider, val stubMode: Boolean) : BaseFirBuilder<PsiElement>(session) {
 
     fun buildFirFile(file: KtFile): FirFile {
         return file.accept(Visitor(), Unit) as FirFile
@@ -458,6 +459,7 @@ class RawFirBuilder(session: FirSession, val stubMode: Boolean) : BaseFirBuilder
                     enumEntry.toFirSourceElement(),
                     session,
                     enumEntry.nameAsSafeName,
+                    scopeProvider,
                     FirRegularClassSymbol(context.currentClassId)
                 )
                 enumEntry.extractAnnotationsTo(firEnumEntry)
@@ -505,6 +507,7 @@ class RawFirBuilder(session: FirSession, val stubMode: Boolean) : BaseFirBuilder
                         classOrObject.nameAsSafeName,
                         status,
                         classKind,
+                        scopeProvider,
                         FirRegularClassSymbol(context.currentClassId)
                     )
                 } else {
@@ -514,6 +517,7 @@ class RawFirBuilder(session: FirSession, val stubMode: Boolean) : BaseFirBuilder
                         classOrObject.nameAsSafeName,
                         status,
                         classKind,
+                        scopeProvider,
                         FirRegularClassSymbol(context.currentClassId)
                     )
                 }
@@ -563,7 +567,7 @@ class RawFirBuilder(session: FirSession, val stubMode: Boolean) : BaseFirBuilder
         override fun visitObjectLiteralExpression(expression: KtObjectLiteralExpression, data: Unit): FirElement {
             val objectDeclaration = expression.objectDeclaration
             return withChildClassName(ANONYMOUS_OBJECT_NAME) {
-                FirAnonymousObjectImpl(expression.toFirSourceElement(), session, FirAnonymousObjectSymbol()).apply {
+                FirAnonymousObjectImpl(expression.toFirSourceElement(), session, scopeProvider, FirAnonymousObjectSymbol()).apply {
                     objectDeclaration.extractAnnotationsTo(this)
                     objectDeclaration.extractSuperTypeListEntriesTo(this, null, ClassKind.CLASS)
                     this.typeRef = superTypeRefs.first() // TODO
