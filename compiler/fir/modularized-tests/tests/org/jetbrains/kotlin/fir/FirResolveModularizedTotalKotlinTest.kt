@@ -60,11 +60,11 @@ class FirResolveModularizedTotalKotlinTest : AbstractModularizedTest() {
         val session = createSession(environment, scope, librariesScope, moduleData.qualifiedName)
         val totalTransformer = FirTotalResolveTransformer()
 
+        val firProvider = session.firProvider as FirProviderImpl
         val firFiles = if (useLightTree) {
-            val lightTree2Fir = LightTree2Fir(session, stubMode = false)
+            val lightTree2Fir = LightTree2Fir(session, firProvider.kotlinScopeProvider, stubMode = false)
             bench.buildFiles(lightTree2Fir, moduleData.sources.filter { it.extension == "kt" })
         } else {
-            val firProvider = session.firProvider as FirProviderImpl
             val builder = RawFirBuilder(session, firProvider.kotlinScopeProvider, stubMode = false)
             bench.buildFiles(builder, ktFiles)
         }
