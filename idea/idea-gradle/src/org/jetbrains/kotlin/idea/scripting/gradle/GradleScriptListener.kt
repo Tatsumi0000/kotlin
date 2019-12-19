@@ -19,6 +19,11 @@ import org.jetbrains.plugins.gradle.util.GradleConstants
 
 open class GradleScriptListener(project: Project) : ScriptChangeListener(project) {
 
+    init {
+        // initialize GradleScriptInputsWatcher to track changes in gradle-configuration related files
+//        GradleScriptInputsWatcher.getInstance(project).startWatching()
+    }
+
     override fun editorActivated(vFile: VirtualFile, updater: ScriptConfigurationUpdater) {
         if (!isGradleKotlinScript(vFile)) return
 
@@ -36,7 +41,7 @@ open class GradleScriptListener(project: Project) : ScriptChangeListener(project
             // *.gradle.kts file was changed
             updater.ensureUpToDatedConfigurationSuggested(file)
         }
-        project.service<GradleScriptInputsWatcher>().addToStorage(vFile)
+        project.service<GradleScriptInputsWatcher>().fileChanged(vFile, vFile.timeStamp)
     }
 
     override fun isApplicable(vFile: VirtualFile): Boolean {

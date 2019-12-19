@@ -5,18 +5,23 @@
 
 package org.jetbrains.kotlin.idea.scripting.gradle
 
+import com.intellij.openapi.components.*
 import com.intellij.openapi.externalSystem.service.project.autoimport.ConfigurationFileCrcFactory
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.PathUtil
+import org.jetbrains.annotations.TestOnly
 import org.jetbrains.plugins.gradle.settings.GradleLocalSettings
 import java.nio.file.Paths
-import java.util.*
 
-class GradleScriptInputsWatcher(val project: Project) {
-    private val comparator = Comparator<VirtualFile> { f1, f2 -> (f1.timeStamp - f2.timeStamp).toInt() }
-
-    private val storage = TreeSet(comparator)
+@State(
+    name = "KotlinBuildScriptsModificationInfo",
+    storages = [Storage(StoragePathMacros.CACHE_FILE)]
+)
+class GradleScriptInputsWatcher(val project: Project) : PersistentStateComponent<GradleScriptInputsWatcher.Storage> {
+    private var storage = Storage()
 
     init {
         initStorage(project)
@@ -29,38 +34,77 @@ class GradleScriptInputsWatcher(val project: Project) {
             if (file != null && !file.isDirectory) {
                 val calculateCrc = ConfigurationFileCrcFactory(file).create()
                 if (calculateCrc != stamp) {
-                    addToStorage(file)
+                    storage.fileChanged(file, file.timeStamp)
                 }
             }
         }
     }
 
-    fun lastModifiedFileTimeStamp(file: VirtualFile): Long = lastModifiedRelatedFile(file)?.timeStamp ?: 0
+    fun lastModifiedFileTimeStamp(file: VirtualFile): Long = storage.lastModifiedTimeStampExcept(file)
 
     fun areRelatedFilesUpToDate(file: VirtualFile, timeStamp: Long): Boolean {
-        return lastModifiedFileTimeStamp(file) <= timeStamp
+        return lastModifiedFileTimeStamp(file) < timeStamp
     }
 
-    fun addToStorage(file: VirtualFile) {
-        if (storage.contains(file)) {
-            storage.remove(file)
+    class Storage(
+        private var lastModifiedTS: Long = Long.MIN_VALUE,
+        private val lastModifiedFiles: MutableSet<String> = hashSetOf(),
+        private var previousModifiedTS: Long = Long.MIN_VALUE,
+        private val previousModifiedFiles: MutableSet<String> = hashSetOf()
+    ) {
+        fun lastModifiedTimeStampExcept(file: VirtualFile): Long {
+            val fileId = getNormalizedPath(file)
+            if (lastModifiedFiles.contains(fileId) && lastModifiedFiles.size == 1) {
+                return previousModifiedTS
+            }
+
+            return lastModifiedTS
         }
-        storage.add(file)
+
+        fun fileChanged(file: VirtualFile, ts: Long) {
+            val fileId = getNormalizedPath(file)
+            println(fileId)
+            println(ts)
+            when {
+                ts > lastModifiedTS -> {
+                    previousModifiedFiles.clear()
+                    previousModifiedFiles.addAll(lastModifiedFiles)
+                    previousModifiedTS = lastModifiedTS
+
+                    lastModifiedTS = ts
+                    lastModifiedFiles.clear()
+                    lastModifiedFiles.add(fileId)
+                }
+                ts == lastModifiedTS -> {
+                    lastModifiedFiles.add(fileId)
+                }
+                ts == previousModifiedTS -> {
+                    previousModifiedFiles.add(fileId)
+                }
+            }
+        }
+
+        private fun getNormalizedPath(file: VirtualFile): String {
+            val canonized = PathUtil.getCanonicalPath(file.path) ?: file.path
+            return FileUtil.toSystemIndependentName(canonized)
+        }
     }
 
-    private fun lastModifiedRelatedFile(file: VirtualFile): VirtualFile? {
-        if (storage.isEmpty()) return null
+    override fun getState(): Storage {
+        return storage
+    }
 
-        val iterator = storage.descendingIterator()
-        if (!iterator.hasNext()) return null
+    override fun loadState(state: Storage) {
+        this.storage = state
+    }
 
-        var lastModifiedFile = iterator.next()
-        while (lastModifiedFile == file && iterator.hasNext()) {
-            lastModifiedFile = iterator.next()
-        }
+    @TestOnly
+    fun clearAndRefillState() {
+        loadState(project.service<GradleScriptInputsWatcher>().state)
+    }
 
-        if (lastModifiedFile == file) return null
-
-        return lastModifiedFile
+    @TestOnly
+    fun fileChanged(file: VirtualFile, ts: Long) {
+        storage.fileChanged(file, ts)
     }
 }

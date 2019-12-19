@@ -5,18 +5,29 @@
 
 package org.jetbrains.kotlin.idea.scripting.gradle
 
+import com.intellij.openapi.components.*
 import com.intellij.openapi.externalSystem.service.project.autoimport.ConfigurationFileCrcFactory
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.util.PathUtil
+import org.jetbrains.annotations.TestOnly
 import org.jetbrains.plugins.gradle.settings.GradleLocalSettings
 import java.nio.file.Paths
-import java.util.*
 
-class GradleScriptInputsWatcher(val project: Project) {
-    private val comparator = Comparator<VirtualFile> { f1, f2 -> (f1.timeStamp - f2.timeStamp).toInt() }
+@State(
+    name = "KotlinGradleScriptsModificationInfo",
+    storages = [Storage(StoragePathMacros.CACHE_FILE)]
+)
+class GradleScriptInputsWatcher(val project: Project) : PersistentStateComponent<GradleScriptInputsWatcher.MyStorage> {
+    companion object {
+        fun getInstance(project: Project): GradleScriptInputsWatcher {
+            return ServiceManager.getService(project, GradleScriptInputsWatcher::class.java)
+        }
+    }
 
-    private val storage = TreeSet(comparator)
+    private var storage = MyStorage()
 
     init {
         initStorage(project)
@@ -29,38 +40,63 @@ class GradleScriptInputsWatcher(val project: Project) {
             if (file != null && !file.isDirectory) {
                 val calculateCrc = ConfigurationFileCrcFactory(project, file).create()
                 if (calculateCrc != stamp) {
-                    addToStorage(file)
+                    storage.fileChanged(getNormalizedPath(file), file.timeStamp)
                 }
             }
         }
     }
 
-    fun lastModifiedFileTimeStamp(file: VirtualFile): Long = lastModifiedRelatedFile(file)?.timeStamp ?: 0
+    fun lastModifiedFileTimeStamp(file: VirtualFile): Long = storage.lastModifiedTimeStampExcept(getNormalizedPath(file))
 
     fun areRelatedFilesUpToDate(file: VirtualFile, timeStamp: Long): Boolean {
-        return lastModifiedFileTimeStamp(file) <= timeStamp
+        return lastModifiedFileTimeStamp(file) < timeStamp
     }
 
-    fun addToStorage(file: VirtualFile) {
-        if (storage.contains(file)) {
-            storage.remove(file)
-        }
-        storage.add(file)
+    fun getNormalizedPath(file: VirtualFile): String {
+        val canonized = PathUtil.getCanonicalPath(file.path) ?: file.path
+        return FileUtil.toSystemIndependentName(canonized)
     }
 
-    private fun lastModifiedRelatedFile(file: VirtualFile): VirtualFile? {
-        if (storage.isEmpty()) return null
+    class MyStorage(
+        private var lastModifiedTS: Long = Long.MIN_VALUE,
+        private val lastModifiedFiles: MutableList<String> = arrayListOf(),
+        private var previousModifiedTS: Long = Long.MIN_VALUE,
+        private val previousModifiedFiles: MutableList<String> = arrayListOf()
+    ) {
+        fun lastModifiedTimeStampExcept(file: String): Long {
+            if (lastModifiedFiles.contains(file) && lastModifiedFiles.size == 1) {
+                return previousModifiedTS
+            }
 
-        val iterator = storage.descendingIterator()
-        if (!iterator.hasNext()) return null
-
-        var lastModifiedFile = iterator.next()
-        while (lastModifiedFile == file && iterator.hasNext()) {
-            lastModifiedFile = iterator.next()
+            return lastModifiedTS
         }
 
-        if (lastModifiedFile == file) return null
+        fun fileChanged(file: String, ts: Long) {
+            when {
+                ts > lastModifiedTS -> {
+                    previousModifiedFiles.clear()
+                    previousModifiedFiles.addAll(lastModifiedFiles)
+                    previousModifiedTS = lastModifiedTS
 
-        return lastModifiedFile
+                    lastModifiedTS = ts
+                    lastModifiedFiles.clear()
+                    lastModifiedFiles.add(file)
+                }
+                ts == lastModifiedTS -> {
+                    lastModifiedFiles.add(file)
+                }
+                ts == previousModifiedTS -> {
+                    previousModifiedFiles.add(file)
+                }
+            }
+        }
+    }
+
+    override fun getState(): MyStorage {
+        return storage
+    }
+
+    override fun loadState(state: MyStorage) {
+        this.storage = state
     }
 }
