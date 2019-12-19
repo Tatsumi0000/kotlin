@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.types.AbstractTypeChecker
 import org.jetbrains.kotlin.types.UnwrappedType
 import org.jetbrains.kotlin.types.model.*
 import java.util.*
+import kotlin.collections.LinkedHashMap
 
 typealias CsCompleterContext = KotlinConstraintSystemCompleter.Context
 
@@ -45,10 +46,11 @@ class CompletionModeCalculator {
         private val csCompleterContext: CsCompleterContext
     ) {
         private enum class FixationDirection {
-            TO_SUBTYPE, TO_SUPERTYPE, EQUALITY
+            TO_SUBTYPE, EQUALITY
         }
 
-        private val fixationDirectionsForVariables = mutableMapOf<VariableWithConstraints, FixationDirection>()
+        private val fixationDirectionsForVariables: MutableMap<VariableWithConstraints, FixationDirection> =
+            LinkedHashMap(csCompleterContext.notFixedTypeVariables.size)
         private val variablesWithQueuedConstraints = mutableSetOf<TypeVariableMarker>()
         private val typesToProcess: Queue<KotlinTypeMarker> = ArrayDeque()
 
@@ -68,14 +70,14 @@ class CompletionModeCalculator {
             while (typesToProcess.isNotEmpty()) {
                 val type = typesToProcess.poll() ?: break
 
-                fixationRequirementForTopLevel(type)?.let { directionForVariable ->
+                fixationDirectionForTopLevel(type)?.let { directionForVariable ->
                     updateDirection(directionForVariable)
                     enqueueTypesFromConstraints(directionForVariable.variable)
                 }
 
                 // find all variables in type and make requirements for them
-                type.contains { fromReturnType ->
-                    for (directionForVariable in directionsForVariablesInTypeArguments(fromReturnType)) {
+                type.contains { typePart ->
+                    for (directionForVariable in directionsForVariablesInTypeArguments(typePart)) {
                         updateDirection(directionForVariable)
                         enqueueTypesFromConstraints(directionForVariable.variable)
                     }
@@ -106,7 +108,6 @@ class CompletionModeCalculator {
         private fun updateDirection(directionForVariable: FixationDirectionForVariable) {
             val (variable, newDirection) = directionForVariable
             fixationDirectionsForVariables[variable]?.let { oldDirection ->
-                // To sub and to super are merged into equality, old equality stays
                 if (oldDirection != FixationDirection.EQUALITY && oldDirection != newDirection)
                     fixationDirectionsForVariables[variable] = FixationDirection.EQUALITY
             }
@@ -115,7 +116,7 @@ class CompletionModeCalculator {
 
         private data class FixationDirectionForVariable(val variable: VariableWithConstraints, val direction: FixationDirection)
 
-        private fun CsCompleterContext.fixationRequirementForTopLevel(type: KotlinTypeMarker): FixationDirectionForVariable? {
+        private fun CsCompleterContext.fixationDirectionForTopLevel(type: KotlinTypeMarker): FixationDirectionForVariable? {
             return notFixedTypeVariables[type.typeConstructor()]?.let {
                 FixationDirectionForVariable(it, FixationDirection.TO_SUBTYPE)
             }
@@ -138,10 +139,10 @@ class CompletionModeCalculator {
 
                 val parameter = type.typeConstructor().getParameter(position)
                 val effectiveVariance = AbstractTypeChecker.effectiveVariance(parameter.getVariance(), argument.getVariance())
-                    ?: TypeVariance.OUT // Discuss
+                    ?: TypeVariance.INV
 
                 val direction = when (effectiveVariance) {
-                    TypeVariance.IN -> FixationDirection.TO_SUPERTYPE
+                    TypeVariance.IN -> FixationDirection.EQUALITY // Assuming that variables in contravariant positions are fixed to subtype
                     TypeVariance.OUT -> FixationDirection.TO_SUBTYPE
                     TypeVariance.INV -> FixationDirection.EQUALITY
                 }
@@ -169,7 +170,6 @@ class CompletionModeCalculator {
 
         private fun Constraint.hasRequiredKind(direction: FixationDirection) = when (direction) {
             FixationDirection.TO_SUBTYPE -> kind.isLower() || kind.isEqual()
-            FixationDirection.TO_SUPERTYPE -> kind.isUpper() || kind.isEqual()
             FixationDirection.EQUALITY -> kind.isEqual()
         }
     }
